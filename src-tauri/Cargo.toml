@@ -1,0 +1,17 @@
+[package]
+name = "port-assistant"
+version = "0.1.0"
+edition = "2024"
+description = "端口助手"
+
+[workspace]
+members = ["transport"]
+resolver = "3"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+port-transport = { path = "transport" }
+tokio = { version = "1", features = ["sync"] }

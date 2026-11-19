@@ -1,0 +1,88 @@
+name: 桌面安装包
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm run build
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked -p port-transport --lib --no-run
+      - name: Rust 单元和回环测试
+        timeout-minutes: 1
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked -p port-transport --lib
+      - run: npm run tauri build -- --target x86_64-pc-windows-msvc --bundles nsis,msi -- --locked
+      - name: 整理 Windows 安装包名称
+        shell: pwsh
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          $nsis = @(Get-ChildItem 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe')
+          $msi = @(Get-ChildItem 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi')
+          if ($nsis.Count -ne 1 -or $msi.Count -ne 1) { throw '安装包数量不符合预期' }
+          Copy-Item -LiteralPath $nsis[0].FullName -Destination "artifacts/portAssistant_${version}_x64-setup.exe"
+          Copy-Item -LiteralPath $msi[0].FullName -Destination "artifacts/portAssistant_${version}_x64.msi"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: port-assistant-windows-x64
+          path: artifacts/*
+          if-no-files-found: error
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            arch: aarch64
+          - target: x86_64-apple-darwin
+            arch: x64
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm run tauri build -- --target ${{ matrix.target }} --bundles dmg -- --locked
+      - name: 整理 macOS 安装包名称
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          mkdir -p artifacts
+          files=(src-tauri/target/"$TARGET"/release/bundle/dmg/*.dmg)
+          test ${#files[@]} -eq 1 && test -f "${files[0]}"
+          cp "${files[0]}" "artifacts/portAssistant_${version}_macOS_${ARCH}.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: port-assistant-macos-${{ matrix.arch }}
+          path: artifacts/*.dmg
+          if-no-files-found: error
