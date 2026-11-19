@@ -23,7 +23,7 @@ const workbench = useWorkbench()
 const {
   connected, reconnecting, autoReconnect, reconnectIntervalMs, activeConnection, connectionIndicator, endpoint, clients, ports, busy, refreshing, sending, timerBusy, running,
   pinned, pinBusy, target, input, sendMode, timed, intervalMs, addFrame, splitFrames,
-  frameMode, headerInput, tailInput, paused, visible, framing, packet, validInterval, canSend,
+  frameMode, headerInput, tailInput, paused, visible, trafficStats, framing, packet, validInterval, canSend,
 } = workbench
 
 const protocol = shallowRef<Protocol>('serial')
@@ -156,21 +156,23 @@ onBeforeUnmount(() => {
       <main class="workbench">
         <ConnectionPanel v-model:protocol="protocol" v-model:target="target"
           v-model:auto-reconnect="autoReconnect" v-model:reconnect-interval="reconnectIntervalMs"
-          v-model:add-frame="addFrame" v-model:split-frames="splitFrames" v-model:frame-mode="frameMode" v-model:header="headerInput" v-model:tail="tailInput"
+          v-model:add-frame="addFrame" v-model:split-frames="splitFrames" :frame-mode="frameMode" v-model:header="headerInput" v-model:tail="tailInput"
+          @update:frame-mode="workbench.setFrameMode"
           :ports="ports" :clients="clients" :busy="busy" :connected="connected" :reconnecting="reconnecting" :indicator="connectionIndicator" :refreshing="refreshing"
           :endpoint="endpoint" :framing-invalid="(addFrame || splitFrames) && !!framing.error"
           @connect="workbench.connect" @disconnect="workbench.disconnect" @refresh="workbench.refreshPorts" @apply-framing="workbench.applyFraming" />
 
         <div ref="workspace" class="workspace">
           <ReceivePanel v-model:paused="paused" v-model:show-time="showTime" v-model:auto-scroll="autoScroll"
-            :rows="visible" :connected="connected" @clear="workbench.clear" />
+            :rows="visible" :connected="connected" :frame-mode="frameMode" @clear="workbench.clear" />
           <SendPanel v-model:input="input" v-model:mode="sendMode" v-model:timed="timed" v-model:interval="intervalMs"
             :frame-mode="frameMode" :packet="packet.value" :input-error="addFrame && !framing.value ? '' : packet.error" :can-send="canSend" :sending="sending" :running="running"
             :timer-busy="timerBusy" :valid-interval="validInterval" @send="workbench.send" @toggle-timer="workbench.toggleTimer" />
         </div>
       </main>
 
-      <ConnectionStatus :connection="activeConnection" :indicator="connectionIndicator" :endpoint="endpoint" :client-count="clients.length" />
+      <ConnectionStatus :connection="activeConnection" :indicator="connectionIndicator" :endpoint="endpoint" :client-count="clients.length"
+        :traffic-stats="trafficStats" @reset-traffic-stats="workbench.resetTrafficStats" />
 
     </div>
   </TooltipProvider>

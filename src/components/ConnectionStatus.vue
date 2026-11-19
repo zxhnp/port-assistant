@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ConnectionIndicator } from '@/composables/useWorkbench'
+import type { ConnectionIndicator, TrafficStats } from '@/composables/useWorkbench'
 import type { Connection } from '@/lib/transport'
 
 const props = defineProps<{
@@ -8,7 +8,23 @@ const props = defineProps<{
   indicator: ConnectionIndicator
   endpoint: string
   clientCount: number
+  trafficStats: TrafficStats
 }>()
+const emit = defineEmits<{ resetTrafficStats: [] }>()
+const numberFormat = new Intl.NumberFormat('zh-CN')
+const sizeFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 })
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${numberFormat.format(bytes)} 字节`
+  const units = ['KB', 'MB', 'GB', 'TB', 'PB']
+  let value = bytes / 1024
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit++
+  }
+  return `${sizeFormat.format(value)} ${units[unit]}`
+}
 
 const parityLabels = { none: '无', odd: '奇', even: '偶', mark: '标记', space: '空格' }
 const udpModeLabels = { unicast: '单播', broadcast: '广播', multicast: '组播' }
@@ -52,5 +68,10 @@ const fields = computed(() => {
         <dd>{{ value }}</dd>
       </div>
     </dl>
+    <div class="traffic-stats" aria-label="收发统计" title="从上次重置开始累计的记录数和字节数，包含帧头和帧尾">
+      <button type="button" class="traffic-reset" @click="emit('resetTrafficStats')">重置统计</button>
+      <span :title="`TX 累计 ${numberFormat.format(trafficStats.tx.bytes)} 字节`">TX <strong>{{ numberFormat.format(trafficStats.tx.records) }}</strong> 条 / <strong>{{ formatBytes(trafficStats.tx.bytes) }}</strong></span>
+      <span :title="`RX 累计 ${numberFormat.format(trafficStats.rx.bytes)} 字节`">RX <strong>{{ numberFormat.format(trafficStats.rx.records) }}</strong> 条 / <strong>{{ formatBytes(trafficStats.rx.bytes) }}</strong></span>
+    </div>
   </footer>
 </template>

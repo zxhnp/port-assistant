@@ -29,7 +29,7 @@ export function parseHex(input: string, limit = MAX_PACKET_BYTES): number[] {
   return bytes
 }
 
-function parseFrameText(input: string): number[] {
+export function parseFrameText(input: string): number[] {
   const value = input.replace(/\\(u\{[\da-fA-F]{1,6}\}|u[\da-fA-F]{3,4}|[nrt\\]|.|$)/g, (_match, escape: string) => {
     if (escape === 'n') return '\n'
     if (escape === 'r') return '\r'
@@ -52,6 +52,22 @@ function parseFrameText(input: string): number[] {
   const bytes = Array.from(encoder.encode(value))
   if (bytes.length > 1024) throw new Error('帧头帧尾各最多支持 1024 字节')
   return bytes
+}
+
+export function formatFrameText(bytes: number[]): string {
+  let value: string
+  try {
+    value = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(Uint8Array.from(bytes))
+  } catch {
+    throw new Error('包含无效的 UTF-8 字节，无法转换为 TXT')
+  }
+  return value.replace(/[\\\x00-\x1F\x7F-\x9F\uFEFF]/g, char => {
+    if (char === '\\') return '\\\\'
+    if (char === '\r') return '\\r'
+    if (char === '\n') return '\\n'
+    if (char === '\t') return '\\t'
+    return `\\u${char.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`
+  })
 }
 
 export function parseFraming(header: string, tail: string, mode: 'hex' | 'text' = 'hex'): Framing {

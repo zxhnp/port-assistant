@@ -10,10 +10,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Toggle } from '@/components/ui/toggle'
 import { Message } from '@/lib/message'
-import { formatHex, formatHexLines } from '@/lib/bytes'
+import { displayText, formatHex, formatHexLines } from '@/lib/bytes'
 import type { LogRow } from '@/composables/useWorkbench'
 
-const props = defineProps<{ rows: LogRow[]; connected: boolean }>()
+const props = defineProps<{ rows: LogRow[]; connected: boolean; frameMode: 'hex' | 'text' }>()
 const emit = defineEmits<{ clear: [] }>()
 const paused = defineModel<boolean>('paused', { required: true })
 const showTime = defineModel<boolean>('showTime', { required: true })
@@ -64,9 +64,9 @@ const details = computed(() => {
     }
   }
   return {
-    header: formatHex(bytes.subarray(0, headerLen)),
+    header: props.frameMode === 'hex' ? formatHex(bytes.subarray(0, headerLen)) : displayText(bytes.subarray(0, headerLen)),
     payload: detailMode.value === 'hex' ? formatHexLines(payload) : text,
-    tail: formatHex(bytes.subarray(bytes.length - tailLen)),
+    tail: props.frameMode === 'hex' ? formatHex(bytes.subarray(bytes.length - tailLen)) : displayText(bytes.subarray(bytes.length - tailLen)),
     length: bytes.length,
   }
 })

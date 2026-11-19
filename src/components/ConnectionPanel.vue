@@ -178,6 +178,7 @@ defineExpose({ toggle, canOpen })
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
+                      <SelectItem v-if="serial.port && !ports.includes(serial.port)" :value="serial.port">{{ serial.port }}</SelectItem>
                       <SelectItem v-for="port in ports" :key="port" :value="port">{{ port }}</SelectItem>
                     </SelectGroup>
                   </SelectContent>

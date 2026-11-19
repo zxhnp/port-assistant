@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
-import { displayText, formatHex, makePacket, parseFraming } from '@/lib/bytes'
+import { displayText, formatFrameText, formatHex, makePacket, parseFrameText, parseFraming, parseHex } from '@/lib/bytes'
 import type { Framing } from '@/lib/bytes'
 import { Message, messageText } from '@/lib/message'
 import { transport } from '@/lib/transport'
@@ -16,6 +16,15 @@ export interface LogRow extends Omit<WireRecord, 'packet'> {
   packet: { bytes: Uint8Array; headerLen: number; tailLen: number }
   hex: string
   text: string
+}
+
+export interface TrafficStats {
+  tx: { records: number; bytes: number }
+  rx: { records: number; bytes: number }
+}
+
+function emptyTrafficStats(): TrafficStats {
+  return { tx: { records: 0, bytes: 0 }, rx: { records: 0, bytes: 0 } }
 }
 
 const MAX_ROWS = 2000
@@ -51,21 +60,37 @@ export function useWorkbench() {
   const addFrame = shallowRef(false)
   const splitFrames = shallowRef(false)
   const frameMode = shallowRef<'hex' | 'text'>('text')
-  const hexHeader = shallowRef('AA 55')
-  const hexTail = shallowRef('0D 0A')
-  const textHeader = shallowRef('\\u0001')
-  const textTail = shallowRef('\\u0004')
-  const headerInput = computed({
-    get: () => frameMode.value === 'hex' ? hexHeader.value : textHeader.value,
-    set: value => { if (frameMode.value === 'hex') hexHeader.value = value; else textHeader.value = value },
-  })
-  const tailInput = computed({
-    get: () => frameMode.value === 'hex' ? hexTail.value : textTail.value,
-    set: value => { if (frameMode.value === 'hex') hexTail.value = value; else textTail.value = value },
-  })
+  const headerInput = shallowRef('\\u0001')
+  const tailInput = shallowRef('\\u0004')
+
+  function setFrameMode(mode: 'hex' | 'text') {
+    if (mode === frameMode.value) return
+    const convert = mode === 'hex'
+      ? (value: string) => formatHex(parseFrameText(value))
+      : (value: string) => formatFrameText(parseHex(value, 1024))
+    let header: string
+    let tail: string
+    try {
+      header = convert(headerInput.value)
+    } catch (cause) {
+      Message.error(`帧头${messageText(cause)}`, 'framing')
+      return
+    }
+    try {
+      tail = convert(tailInput.value)
+    } catch (cause) {
+      Message.error(`帧尾${messageText(cause)}`, 'framing')
+      return
+    }
+    headerInput.value = header
+    tailInput.value = tail
+    frameMode.value = mode
+    Message.dismiss('framing')
+  }
 
   const paused = shallowRef(false)
   const visible = shallowRef<LogRow[]>([])
+  const trafficStats = shallowRef<TrafficStats>(emptyTrafficStats())
   const buffered: LogRow[] = []
   let bufferedBytes = 0
   let nextRow = 1
@@ -132,8 +157,11 @@ export function useWorkbench() {
   }
 
   function append(received: WireRecord[]) {
+    const stats = { tx: { ...trafficStats.value.tx }, rx: { ...trafficStats.value.rx } }
     for (const { packet, ...record } of received) {
       const bytes = Uint8Array.from(packet.bytes)
+      stats[record.direction].records++
+      stats[record.direction].bytes += bytes.length
       const peek = bytes.subarray(0, 120)
       const end = bytes.length > peek.length ? ' …' : ''
       buffered.push({
@@ -146,12 +174,17 @@ export function useWorkbench() {
       })
       bufferedBytes += bytes.length
     }
+    trafficStats.value = stats
     let discard = 0
     while (buffered.length - discard > MAX_ROWS || bufferedBytes > MAX_LOG_BYTES) {
       bufferedBytes -= buffered[discard++].packet.bytes.length
     }
     if (discard) buffered.splice(0, discard)
     syncDisplay()
+  }
+
+  function resetTrafficStats() {
+    trafficStats.value = emptyTrafficStats()
   }
 
   function clear() {
@@ -361,7 +394,7 @@ export function useWorkbench() {
   return {
     connected, reconnecting, autoReconnect, reconnectIntervalMs, activeConnection, connectionIndicator, endpoint, clients, ports, busy, refreshing, sending, timerBusy, running,
     pinned, pinBusy, target, input, sendMode, timed, intervalMs, addFrame, splitFrames, frameMode, headerInput,
-    tailInput, paused, visible, framing, packet, validInterval, canSend, clear, refreshPorts, connect,
-    disconnect, applyFraming, send, toggleTimer, togglePin,
+    tailInput, paused, visible, trafficStats, framing, packet, validInterval, canSend, clear, resetTrafficStats, refreshPorts, connect,
+    disconnect, applyFraming, setFrameMode, send, toggleTimer, togglePin,
   }
 }
