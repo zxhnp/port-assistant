@@ -260,41 +260,67 @@ impl<F: Fn(Event)> Actor<F> {
                 self.endpoint = port.clone();
                 self.add_stream(0, port, stream);
             }
-            Connection::Udp { local, mode, group, interface, multicast_ttl } => {
+            Connection::Udp {
+                local,
+                mode,
+                group,
+                interface,
+                multicast_ttl,
+            } => {
                 let socket = UdpSocket::bind(host_tuple(&local)?)
                     .await
                     .map_err(|error| format!("无法绑定 UDP：{error}"))?;
                 match mode {
                     UdpMode::Unicast => {}
                     UdpMode::Broadcast => {
-                        if !socket.local_addr().map_err(|error| error.to_string())?.is_ipv4() {
+                        if !socket
+                            .local_addr()
+                            .map_err(|error| error.to_string())?
+                            .is_ipv4()
+                        {
                             return Err("UDP 广播需要 IPv4 本地地址".into());
                         }
-                        socket.set_broadcast(true)
+                        socket
+                            .set_broadcast(true)
                             .map_err(|error| format!("无法启用 UDP 广播：{error}"))?;
                     }
                     UdpMode::Multicast => {
-                        if !socket.local_addr().map_err(|error| error.to_string())?.is_ipv4() {
+                        if !socket
+                            .local_addr()
+                            .map_err(|error| error.to_string())?
+                            .is_ipv4()
+                        {
                             return Err("UDP 组播需要 IPv4 本地地址".into());
                         }
-                        let group: Ipv4Addr = group.as_deref().unwrap_or("").parse()
+                        let group: Ipv4Addr = group
+                            .as_deref()
+                            .unwrap_or("")
+                            .parse()
                             .map_err(|_| "请输入有效的 IPv4 组播地址".to_string())?;
                         if !group.is_multicast() {
                             return Err("组播地址须在 224.0.0.0～239.255.255.255 范围内".into());
                         }
-                        let local_address = socket.local_addr().map_err(|error| error.to_string())?;
+                        let local_address =
+                            socket.local_addr().map_err(|error| error.to_string())?;
                         let interface: Ipv4Addr = match interface {
-                            Some(address) => address.parse().map_err(|_| "请输入有效的 IPv4 网卡地址".to_string())?,
+                            Some(address) => address
+                                .parse()
+                                .map_err(|_| "请输入有效的 IPv4 网卡地址".to_string())?,
                             None => match local_address {
                                 SocketAddr::V4(address) => *address.ip(),
-                                SocketAddr::V6(_) => return Err("UDP 组播需要 IPv4 本地地址".into()),
+                                SocketAddr::V6(_) => {
+                                    return Err("UDP 组播需要 IPv4 本地地址".into());
+                                }
                             },
                         };
-                        socket.set_multicast_ttl_v4(u32::from(multicast_ttl.unwrap_or(1)))
+                        socket
+                            .set_multicast_ttl_v4(u32::from(multicast_ttl.unwrap_or(1)))
                             .map_err(|error| format!("设置 UDP 组播 TTL 失败：{error}"))?;
-                        socket.join_multicast_v4(group, interface)
+                        socket
+                            .join_multicast_v4(group, interface)
                             .map_err(|error| format!("加入 UDP 组播失败：{error}"))?;
-                        socket2::SockRef::from(&socket).set_multicast_if_v4(&interface)
+                        socket2::SockRef::from(&socket)
+                            .set_multicast_if_v4(&interface)
                             .map_err(|error| format!("设置 UDP 组播网卡失败：{error}"))?;
                     }
                 }
@@ -866,13 +892,21 @@ mod tests {
         let probe = UdpSocket::bind("127.0.0.1:0").await.unwrap();
         let port = probe.local_addr().unwrap().port();
         drop(probe);
-        let result = connect(Connection::Udp {
-            local: Address { host: "127.0.0.1".into(), port },
-            mode: UdpMode::Multicast,
-            group: Some("127.0.0.1".into()),
-            interface: Some("127.0.0.1".into()),
-            multicast_ttl: None,
-        }, None, |_| {}).await;
+        let result = connect(
+            Connection::Udp {
+                local: Address {
+                    host: "127.0.0.1".into(),
+                    port,
+                },
+                mode: UdpMode::Multicast,
+                group: Some("127.0.0.1".into()),
+                interface: Some("127.0.0.1".into()),
+                multicast_ttl: None,
+            },
+            None,
+            |_| {},
+        )
+        .await;
         assert!(result.err().unwrap().contains("组播地址"));
         UdpSocket::bind(("127.0.0.1", port)).await.unwrap();
     }
@@ -882,19 +916,33 @@ mod tests {
         let (tx, mut events) = mpsc::unbounded_channel();
         let session = connect(
             Connection::Udp {
-                local: Address { host: "127.0.0.1".into(), port: 0 },
+                local: Address {
+                    host: "127.0.0.1".into(),
+                    port: 0,
+                },
                 mode: UdpMode::Multicast,
                 group: Some("239.255.23.42".into()),
                 interface: None,
                 multicast_ttl: Some(255),
             },
             None,
-            move |event| { let _ = tx.send(event); },
-        ).await.unwrap();
+            move |event| {
+                let _ = tx.send(event);
+            },
+        )
+        .await
+        .unwrap();
         let local = endpoint(&mut events).await;
-        session.send(raw_packet(b"multicast".to_vec()), Some(Target::Udp {
-            host: "239.255.23.42".into(), port: local.port(),
-        })).await.unwrap();
+        session
+            .send(
+                raw_packet(b"multicast".to_vec()),
+                Some(Target::Udp {
+                    host: "239.255.23.42".into(),
+                    port: local.port(),
+                }),
+            )
+            .await
+            .unwrap();
         let tx_record = message(&mut events).await;
         let rx_record = message(&mut events).await;
         assert!(matches!(tx_record.direction, Direction::Tx));
@@ -917,14 +965,28 @@ mod tests {
                 multicast_ttl: None,
             },
             None,
-            move |event| { let _ = tx.send(event); },
-        ).await.unwrap();
+            move |event| {
+                let _ = tx.send(event);
+            },
+        )
+        .await
+        .unwrap();
         endpoint(&mut events).await;
-        session.send(raw_packet(b"broadcast".to_vec()), Some(Target::Udp {
-            host: "127.255.255.255".into(), port,
-        })).await.unwrap();
+        session
+            .send(
+                raw_packet(b"broadcast".to_vec()),
+                Some(Target::Udp {
+                    host: "127.255.255.255".into(),
+                    port,
+                }),
+            )
+            .await
+            .unwrap();
         let mut buffer = [0; 32];
-        let (length, _) = timeout(Duration::from_secs(3), remote.recv_from(&mut buffer)).await.unwrap().unwrap();
+        let (length, _) = timeout(Duration::from_secs(3), remote.recv_from(&mut buffer))
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(&buffer[..length], b"broadcast");
         session.close().await;
     }
@@ -933,7 +995,13 @@ mod tests {
     async fn udp_loopback_preserves_datagram_boundaries() {
         let (tx, mut events) = mpsc::unbounded_channel();
         let session = connect(
-            Connection::Udp { local: loopback(), mode: UdpMode::Unicast, group: None, interface: None, multicast_ttl: None },
+            Connection::Udp {
+                local: loopback(),
+                mode: UdpMode::Unicast,
+                group: None,
+                interface: None,
+                multicast_ttl: None,
+            },
             Some(framing()),
             move |event| {
                 let _ = tx.send(event);
