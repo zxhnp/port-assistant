@@ -2,9 +2,12 @@ name: 桌面安装包
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   windows:
@@ -86,3 +89,33 @@ jobs:
           name: port-assistant-macos-${{ matrix.arch }}
           path: artifacts/*.dmg
           if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: 检查标签与版本一致
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          test "$TAG_NAME" = "v$version"
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: 发布安装包
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 端口助手 ${{ github.ref_name }}
+          body: |
+            端口助手测试版本，提供 Windows x64 和 macOS Apple Silicon / Intel 安装包。
+
+            安装包尚未配置代码签名和 Apple 公证。
+          files: |
+            artifacts/*.exe
+            artifacts/*.msi
+            artifacts/*.dmg
+          fail_on_unmatched_files: true
