@@ -84,7 +84,7 @@ OutFile "${OUTFILE}"
 ; We don't actually use this value as default install path,
 ; it's just for nsis to append the product name folder in the directory selector
 ; https://nsis.sourceforge.io/Reference/InstallDir
-!define PLACEHOLDER_INSTALL_DIR "placeholder\${PRODUCTNAME}"
+!define PLACEHOLDER_INSTALL_DIR "placeholder\PortAssistant"
 InstallDir "${PLACEHOLDER_INSTALL_DIR}"
 
 VIProductVersion "${VERSIONWITHBUILD}"
@@ -113,7 +113,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 !if "${INSTALLMODE}" == "both"
   !define MULTIUSER_MUI
-  !define MULTIUSER_INSTALLMODE_INSTDIR "portAssistant"
+  !define MULTIUSER_INSTALLMODE_INSTDIR "PortAssistant"
   !define MULTIUSER_INSTALLMODE_COMMANDLINE
   !if "${ARCH}" == "x64"
     !define MULTIUSER_USE_PROGRAMFILES64
@@ -534,17 +534,17 @@ Function .onInit
     !if "${INSTALLMODE}" == "perMachine"
       ${If} ${RunningX64}
         !if "${ARCH}" == "x64"
-          StrCpy $INSTDIR "$PROGRAMFILES64\portAssistant"
+          StrCpy $INSTDIR "$PROGRAMFILES64\PortAssistant"
         !else if "${ARCH}" == "arm64"
-          StrCpy $INSTDIR "$PROGRAMFILES64\portAssistant"
+          StrCpy $INSTDIR "$PROGRAMFILES64\PortAssistant"
         !else
-          StrCpy $INSTDIR "$PROGRAMFILES\portAssistant"
+          StrCpy $INSTDIR "$PROGRAMFILES\PortAssistant"
         !endif
       ${Else}
-        StrCpy $INSTDIR "$PROGRAMFILES\portAssistant"
+        StrCpy $INSTDIR "$PROGRAMFILES\PortAssistant"
       ${EndIf}
     !else if "${INSTALLMODE}" == "currentUser"
-      StrCpy $INSTDIR "$LOCALAPPDATA\portAssistant"
+      StrCpy $INSTDIR "$LOCALAPPDATA\PortAssistant"
     !endif
 
     Call RestorePreviousInstallLocation

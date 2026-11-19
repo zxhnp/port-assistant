@@ -2440,7 +2440,7 @@ dependencies = [
 
 [[package]]
 name = "port-assistant"
-version = "0.1.2"
+version = "0.1.0"
 dependencies = [
  "port-transport",
  "tauri",
